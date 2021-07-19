@@ -1,0 +1,13 @@
+[Unit]
+Description=ndproxy
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+#WorkingDirectory=/etc/ndproxy
+EnvironmentFile=-/etc/default/ndproxy
+ExecStart=/usr/sbin/ndproxy $NDPROXY_OPTS
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
