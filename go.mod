@@ -1,4 +1,4 @@
-module bits.linode.com/tpaler/ndproxy
+module github.com/linode/ndproxy
 
 go 1.16
 
