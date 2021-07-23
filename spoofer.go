@@ -11,20 +11,11 @@ import (
 	"golang.org/x/net/ipv6"
 )
 
-func FindIP(a net.IP, b []net.IP) int {
-	for j, bb := range b {
-		if a.Equal(bb) {
-			return j
-		}
-	}
-	return -1
-}
-
 type Spoofer struct {
 	c       *ndp.Conn
 	spoofer net.HardwareAddr
 	lock    sync.RWMutex
-	ips     *[]net.IP
+	ips     map[string]net.IP
 }
 
 func NewSpoofer(iface, mac string) (*Spoofer, error) {
@@ -58,7 +49,7 @@ func NewSpoofer(iface, mac string) (*Spoofer, error) {
 	return &Spoofer{
 		c:       c,
 		spoofer: m,
-		ips:     &[]net.IP{},
+		ips:     make(map[string]net.IP),
 	}, nil
 }
 
@@ -73,20 +64,20 @@ func (s *Spoofer) readND() {
 	}
 }
 
+func (c *Spoofer) CheckIp(ip net.IP) bool {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+	_, exists := c.ips[ip.String()]
+	return exists
+}
+
 func (s *Spoofer) handleND(msg ndp.Message, from net.IP) {
 	ns := msg.(*ndp.NeighborSolicitation)
 	log.Tracef("requested %v from %v", ns.TargetAddress, from)
 
-	s.lock.RLock()
-	currentIps := *s.ips
-	s.lock.RUnlock()
-
-	for _, ip := range currentIps {
-		if ns.TargetAddress.Equal(ip) {
-			if err := s.SendNA(from, ip, true); err != nil {
-				log.Warnf("unable to send a spoofed reply: %v", err)
-			}
-			break
+	if s.CheckIp(ns.TargetAddress) {
+		if err := s.SendNA(from, ns.TargetAddress, true); err != nil {
+			log.Warnf("unable to send a spoofed reply: %v", err)
 		}
 	}
 }
@@ -120,47 +111,41 @@ func (s *Spoofer) SendNA(to, ip net.IP, sol bool) error {
 	return nil
 }
 
-func (s *Spoofer) sendGracious(timer time.Duration) {
+func (s *Spoofer) sendGratuitous(timer time.Duration) {
 	for {
 		select {
 		case <-time.After(timer):
 		}
 
 		s.lock.RLock()
-		currentIps := *s.ips
-		s.lock.RUnlock()
-
-		for _, ip := range currentIps {
+		for _, ip := range s.ips {
 			if err := s.SendNA(net.IPv6linklocalallnodes, ip, false); err != nil {
-				log.Warnf("Failed sending arp for %v: %v", ip, err)
+				log.Warnf("Failed sending non-solicit ND for %v: %v", ip, err)
 			}
 		}
+		s.lock.RUnlock()
 	}
 }
 
-func (s *Spoofer) updateIps(newIps *[]net.IP) {
-	s.lock.RLock()
-	oldIps := *s.ips
-	s.lock.RUnlock()
-
-	for _, ip := range oldIps {
-		if idx := FindIP(ip, *newIps); idx == -1 {
+func (s *Spoofer) updateIps(newIps map[string]net.IP) {
+	s.lock.Lock()
+	for sip, ip := range s.ips {
+		if _, exists := newIps[sip]; !exists {
 			if err := s.leaveGroup(ip); err != nil {
 				log.Warnf("failed to leave multicast group: %v", err)
 			}
+			delete(s.ips, sip)
 		}
 	}
 
-	for _, ip := range *newIps {
-		if idx := FindIP(ip, oldIps); idx == -1 {
+	for sip, ip := range newIps {
+		if _, exists := s.ips[sip]; !exists {
 			if err := s.joinGroup(ip); err != nil {
 				log.Warnf("failed to join multicast group: %v", err)
 			}
+			s.ips[sip] = ip
 		}
 	}
-
-	s.lock.Lock()
-	s.ips = newIps
 	s.lock.Unlock()
 }
 

@@ -60,7 +60,7 @@ func main() {
 
 	// I should be implementing error group here but none of these should ever stop
 	go updater(s, *fileFlag, *intFlag)
-	go s.sendGracious(*intFlag)
+	go s.sendGratuitous(*intFlag)
 	go s.readND()
 
 	<-sigC
@@ -68,7 +68,7 @@ func main() {
 
 }
 
-func readFile(filename string) (*[]net.IP, error) {
+func readFile(filename string) (*map[string]net.IP, error) {
 	file, err := os.Open(filename)
 	defer file.Close()
 	if err != nil {
@@ -77,7 +77,8 @@ func readFile(filename string) (*[]net.IP, error) {
 
 	scanner := bufio.NewScanner(file)
 	scanner.Split(bufio.ScanLines)
-	var newIps []net.IP
+
+	newIps := make(map[string]net.IP)
 
 	for scanner.Scan() {
 		s := scanner.Text()
@@ -86,7 +87,7 @@ func readFile(filename string) (*[]net.IP, error) {
 			log.Warnf("could not parse IP %v", s)
 			continue
 		}
-		newIps = append(newIps, ip)
+		newIps[s] = ip
 	}
 
 	return &newIps, nil
@@ -111,6 +112,6 @@ func updater(s *Spoofer, filename string, timer time.Duration) {
 		}
 
 		log.Infof("Updated list of IPs: %v", *newIps)
-		s.updateIps(newIps)
+		s.updateIps(*newIps)
 	}
 }
