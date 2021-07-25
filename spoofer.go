@@ -11,6 +11,7 @@ import (
 	"golang.org/x/net/ipv6"
 )
 
+// A Spoofer is an Object containing various needs to send spoofed ND messages
 type Spoofer struct {
 	c       *ndp.Conn
 	spoofer net.HardwareAddr
@@ -18,6 +19,7 @@ type Spoofer struct {
 	ips     map[string]net.IP
 }
 
+// NewSpoofer creates a new Spoofer object based on interface name to listen on, Mac Address to use in spoofed replies
 func NewSpoofer(iface, mac string) (*Spoofer, error) {
 	m, err := net.ParseMAC(mac)
 	if err != nil {
@@ -64,25 +66,33 @@ func (s *Spoofer) readND() {
 	}
 }
 
-func (c *Spoofer) CheckIp(ip net.IP) bool {
-	c.lock.RLock()
-	defer c.lock.RUnlock()
-	_, exists := c.ips[ip.String()]
+func (s *Spoofer) hasIP(ip net.IP) bool {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	_, exists := s.ips[ip.String()]
 	return exists
 }
 
 func (s *Spoofer) handleND(msg ndp.Message, from net.IP) {
-	ns := msg.(*ndp.NeighborSolicitation)
-	log.Tracef("requested %v from %v", ns.TargetAddress, from)
+	req := msg.(*ndp.NeighborSolicitation)
+	log.Tracef("requested %v from %v", req.TargetAddress, from)
 
-	if s.CheckIp(ns.TargetAddress) {
-		if err := s.SendNA(from, ns.TargetAddress, true); err != nil {
+	if s.hasIP(req.TargetAddress) {
+		if err := s.SendNA(from, req.TargetAddress); err != nil {
 			log.Warnf("unable to send a spoofed reply: %v", err)
 		}
 	}
 }
 
-func (s *Spoofer) SendNA(to, ip net.IP, sol bool) error {
+// SendNA sends a single NA for ip to destination, destionation may be All link local nodes
+func (s *Spoofer) SendNA(to, ip net.IP) error {
+	sol := true
+
+	// if to is equal to the all link local nodes I'm sending a non-solicited NA, this means I also wanna set override flag to true
+	if to.Equal(net.IPv6linklocalallnodes) {
+		sol = false
+	}
+
 	m := &ndp.NeighborAdvertisement{
 		Router:        true,
 		Solicited:     sol,
@@ -111,7 +121,7 @@ func (s *Spoofer) SendNA(to, ip net.IP, sol bool) error {
 	return nil
 }
 
-func (s *Spoofer) sendGratuitous(timer time.Duration) {
+func (s *Spoofer) handleNonSolicits(timer time.Duration) {
 	for {
 		select {
 		case <-time.After(timer):
@@ -119,7 +129,7 @@ func (s *Spoofer) sendGratuitous(timer time.Duration) {
 
 		s.lock.RLock()
 		for _, ip := range s.ips {
-			if err := s.SendNA(net.IPv6linklocalallnodes, ip, false); err != nil {
+			if err := s.SendNA(net.IPv6linklocalallnodes, ip); err != nil {
 				log.Warnf("Failed sending non-solicit ND for %v: %v", ip, err)
 			}
 		}

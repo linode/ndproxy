@@ -22,7 +22,7 @@ func main() {
 	// fileFlag is used to get the filename listing the IPs to spoof
 	fileFlag := flag.String("f", "/etc/ndproxy.list", "file listing all migrated IPv6")
 	logFlag := flag.String("loglevel", "info", "loglevel")
-	logJson := flag.Bool("logjson", false, "log plain text or json")
+	logJSON := flag.Bool("logjson", false, "log plain text or json")
 
 	//bindFlag := flag.String("bind", "ll", "bind to: ll, global or all")
 
@@ -40,7 +40,7 @@ func main() {
 		log.SetLevel(log.InfoLevel)
 	}
 
-	if *logJson {
+	if *logJSON {
 		log.SetFormatter(&log.JSONFormatter{})
 	} else {
 		log.SetFormatter(&log.TextFormatter{
@@ -60,7 +60,7 @@ func main() {
 
 	// I should be implementing error group here but none of these should ever stop
 	go updater(s, *fileFlag, *intFlag)
-	go s.sendGratuitous(*intFlag)
+	go s.handleNonSolicits(*intFlag)
 	go s.readND()
 
 	<-sigC
