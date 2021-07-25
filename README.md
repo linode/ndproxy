@@ -9,6 +9,11 @@ by doing so we can:
 - by using the mac of the local interface (and using the spoofed mac in the payload) we do not break any cam/switch tables along the way
 
 
+NOTE:
+the best way is still sending the prefix RAs without the onlink flag
+
+
+
 ### usage:
 tools comes with a systemd service unit and a /etc/default/ndproxy file  
 update the file to your needs

@@ -117,7 +117,7 @@ func (s *Spoofer) SendNA(to, ip net.IP) error {
 		return fmt.Errorf("failed to send spoofed nd to %v: %w", to, err)
 	}
 
-	log.Debugf("sent spoofed nd to %v Spoofing %v with %v", to, ip, s.spoofer)
+	log.Debugf("sent spoofed nd to %v Spoofing %v with %v (solicited: %v)", to, ip, s.spoofer, sol)
 	return nil
 }
 
