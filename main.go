@@ -22,7 +22,7 @@ func main() {
 	// fileFlag is used to get the filename listing the IPs to spoof
 	fileFlag := flag.String("f", "/etc/ndproxy.list", "file listing all migrated IPv6")
 	logFlag := flag.String("loglevel", "info", "loglevel")
-	logJson := flag.Bool("logjson", false, "log plain text or json")
+	logJSON := flag.Bool("logjson", false, "log plain text or json")
 
 	//bindFlag := flag.String("bind", "ll", "bind to: ll, global or all")
 
@@ -40,7 +40,7 @@ func main() {
 		log.SetLevel(log.InfoLevel)
 	}
 
-	if *logJson {
+	if *logJSON {
 		log.SetFormatter(&log.JSONFormatter{})
 	} else {
 		log.SetFormatter(&log.TextFormatter{
@@ -60,7 +60,7 @@ func main() {
 
 	// I should be implementing error group here but none of these should ever stop
 	go updater(s, *fileFlag, *intFlag)
-	go s.sendGracious(*intFlag)
+	go s.handleNonSolicits(*intFlag)
 	go s.readND()
 
 	<-sigC
@@ -68,7 +68,7 @@ func main() {
 
 }
 
-func readFile(filename string) (*[]net.IP, error) {
+func readFile(filename string) (*map[string]net.IP, error) {
 	file, err := os.Open(filename)
 	defer file.Close()
 	if err != nil {
@@ -77,7 +77,8 @@ func readFile(filename string) (*[]net.IP, error) {
 
 	scanner := bufio.NewScanner(file)
 	scanner.Split(bufio.ScanLines)
-	var newIps []net.IP
+
+	newIps := make(map[string]net.IP)
 
 	for scanner.Scan() {
 		s := scanner.Text()
@@ -86,7 +87,7 @@ func readFile(filename string) (*[]net.IP, error) {
 			log.Warnf("could not parse IP %v", s)
 			continue
 		}
-		newIps = append(newIps, ip)
+		newIps[s] = ip
 	}
 
 	return &newIps, nil
@@ -111,6 +112,6 @@ func updater(s *Spoofer, filename string, timer time.Duration) {
 		}
 
 		log.Infof("Updated list of IPs: %v", *newIps)
-		s.updateIps(newIps)
+		s.updateIps(*newIps)
 	}
 }
